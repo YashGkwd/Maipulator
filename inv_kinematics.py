@@ -1,47 +1,74 @@
-def inv_kinematics(x,y,z,i,pi):
-    fx = end_aff[0] - x
-    fy = end_aff[1] - y
-    fz = end_aff[2] - z
-    fx_v=s.lambdify([t1,t2,t3],fx,"numpy")
-    fy_v = s.lambdify([t1, t2, t3], fy, "numpy")
-    fz_v = s.lambdify([t1, t2, t3], fz, "numpy")
-    F = s.Matrix([fx,fy,fz])
-    if i==0:
-      ig = np.array([[0],[np.pi/3],[np.pi/2]])
-    else:
-        ig=pi
-    J = s.simplify(F.jacobian([t1,t2,t3]))
-    while abs(fx_v(ig[0][0],ig[1][0],ig[2][0]))>=0.001 or (abs(fy_v(ig[0][0],ig[1][0],ig[2][0]))>=0.001) or (abs(fz_v(ig[0][0],ig[1][0],ig[2][0]))>=0.001) :
-         J_i = J.subs({t1:ig[0][0],t2:ig[1][0],t3:ig[2][0]})
-         F_i = F.subs({t1: ig[0][0], t2: ig[1][0], t3: ig[2][0]})
-         jac_inv=np.linalg.inv(np.array(J_i).astype(np.float64))
-         F_ivalue=np.array(F_i).astype(np.float64)
-         ig = ig - np.dot(jac_inv,F_ivalue)
-    return ig
+import pybullet as pb
+import time
+import pybullet_data
+import pylab as p
+import sympy as s
 
-xt=[]
-yt=[]
-zt=[]
-angles=[]
-for i in range(50 ,100):
-    xt.append(((100-i)*(3)+i*(0))/100)
-    yt.append(((100 - i) * (1) + i * (1)) / 100)
-    zt.append(((100 - i) * (0) + i * (1)) / 100)
+physicsClient = pb.connect(pb.GUI)
+pb.setAdditionalSearchPath(pybullet_data.getDataPath())
+pb.loadURDF("plane.urdf")
+robot = pb.loadURDF("C:\\Users\\Lenovo\\Downloads\\pybullet-force-control-main\\pybullet-force-control-main\\urdf\\ur5.urdf")
+print(robot)
 
-x_cordi = s.Matrix([T02[0,-1],T03[0,-1],T04[0,-1]])
-y_cordi = s.Matrix([T02[1,-1],T03[1,-1],T04[1,-1]])
-z_cordi = s.Matrix([T02[2,-1],T03[2,-1],T04[2,-1]])
-x_data = []
-y_data = []
-z_data = []
+pb.changeVisualShape(1,0,rgbaColor=(1,1,1,1))
+pb.changeVisualShape(1,1,rgbaColor=(1,0,0,1))
+pb.changeVisualShape(1,2,rgbaColor=(0,1,0,1))
+pb.changeVisualShape(1,3,rgbaColor=(0,0,1,1))
+pb.changeVisualShape(1,4,rgbaColor=(0,1,1,1))
+pb.changeVisualShape(1,5,rgbaColor=(0,0,0,1))
+pb.changeVisualShape(1,6,rgbaColor=(1,0,0,1))
+pb.createConstraint(robot,-1,-1,0,pb.JOINT_FIXED,[0, 0, 0], [0, 0, 0],[0,0,0])
 
-for i in range(len(xt)):
-    print(i)
+l=0
+pb.setRealTimeSimulation(1)
+time.sleep(5)
 
-    theta = inv_kinematics(xt[i], yt[i], zt[i],i, theta)
-    x_p = (x_cordi.subs({t1: theta[0][0], t2: theta[1][0], t3: theta[2][0]}))
-    y_p = (y_cordi.subs({t1: theta[0][0], t2: theta[1][0], t3: theta[2][0]}))
-    z_p = (z_cordi.subs({t1: theta[0][0], t2: theta[1][0], t3: theta[2][0]}))
-    x_data.append([x_p[0],x_p[1],x_p[2]])
-    y_data.append([y_p[0],y_p[1],y_p[2]])
-    z_data.append([z_p[0],z_p[1],z_p[2]])
+
+p1 = [0.7,-0.4,1-0.13]
+p2 = [0.6,0.4,1.75-0.21]
+p3 = [-0.35,1,1.35-0.3]
+pb.addUserDebugLine(p1,p2,[1,0,0],4,0)
+pb.addUserDebugLine(p2,p3,[1,0,0],4,0)
+pnts = [p1,p2,p3]
+from sympy import binomial
+t = s.Symbol("t")
+n = s.Symbol("n")
+i = s.Symbol("i")
+f = binomial(n,i)*t**i*(1-t)**(n-i)
+# x= 2*s.Sum(f,(i,0,n))
+fx=0
+for l in range(len(pnts)):
+   fun = pnts[l][0]*f.subs({i:l,n:len(pnts)-1})
+   fx += fun
+
+fy=0
+for l in range(len(pnts)):
+   fun = pnts[l][1]*f.subs({i:l,n:len(pnts)-1})
+   fy += fun
+
+fz=0
+for l in range(len(pnts)):
+   fun = pnts[l][2]*f.subs({i:l,n:len(pnts)-1})
+   fz += fun
+
+x= []
+y= []
+z= []
+for s in range(101):
+    ts= 0.01*s
+    x.append(fx.subs(t,ts))
+    y.append(fy.subs(t, ts))
+    z.append(fz.subs(t, ts))
+print(len(x))
+print(x[0],y[0],z[0])
+for q in range(101):
+
+     post = pb.calculateInverseKinematics(robot,7,[x[q],y[q],z[q]])
+     pb.addUserDebugLine([x[q],y[q],z[q]], [x[q]+0.01,y[q]+0.01,z[q]+0.01], [0, 1, 0], 8, 0)
+     #print(len(post))
+     # print(pb.getNumJoints(robot))
+     for i in range(6):
+         pb.setJointMotorControl2(robot,i+1,pb.POSITION_CONTROL,targetPosition=post[i],force=200,physicsClientId=physicsClient)
+     time.sleep(0.2)
+time.sleep(2)
+pb.disconnect(physicsClient)
